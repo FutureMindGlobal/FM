@@ -1,88 +1,84 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase, type PlatformRole } from "../../lib/supabase";
 import styles from "./Admin.module.css";
 
-const navigation = [
-  ["Overview", "⌂"], ["Challenges", "◫"], ["Question Bank", "?"],
-  ["Participants", "◎"], ["Results", "↗"], ["Certificates", "◇"],
-  ["Website Content", "▤"], ["Appearance", "✦"], ["Administrators", "♙"], ["Audit Log", "≡"],
-];
+type Group = { id:string; name:string; slug:string; description:string; group_type:string; visibility:string; show_answers:boolean; show_explanations:boolean; is_active:boolean };
+type Question = { id:string; group_id:string|null; question_text:string; explanation:string|null; difficulty:number; is_active:boolean };
+type Exam = { id:string; title:string; slug:string; pathway:string; status:string; time_limit_minutes:number; pass_percentage:number; opens_at:string|null; closes_at:string|null; exam_timezone:string; requires_enrollment:boolean; fixed_finish:boolean; maximum_attempts:number; certificate_requires_approval:boolean };
+type Enrollment = { id:string; quiz_id:string; participant_id:string; status:string; created_at:string };
+type CertificateRequest = { id:string; attempt_id:string; participant_id:string; quiz_id:string; status:string; created_at:string };
+type Profile = { id:string; full_name:string|null; email:string; role:string };
+type Attempt = { id:string; percentage:number|null };
 
-const participants = [
-  ["Maya Chen", "Global Leader", "92%", "Distinction", "2 min ago"],
-  ["Omar Al-Hassan", "Pioneer", "84%", "Achievement", "18 min ago"],
-  ["Sofia Martinez", "Global Leader", "79%", "Achievement", "41 min ago"],
-  ["Daniel Okafor", "Explorer", "—", "In progress", "1 hr ago"],
-  ["Leila Rahman", "Pioneer", "94%", "Distinction", "2 hrs ago"],
-];
+const nav = ["Overview","Question Bank","Exams & Schedule","Enrollments","Certificate Approval","Participants"];
+const groupTypes = ["practice","demo","previous_year","mock","live_exam","certification"];
+const visibilityOptions = ["hidden","registered","enrolled","scheduled"];
+const nice = (value:string) => value.replaceAll("_"," ").replace(/\b\w/g, c=>c.toUpperCase());
+const slugify = (value:string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
 
-const panels: Record<string, { title: string; copy: string; items: string[] }> = {
-  Challenges: { title: "Challenge management", copy: "Create, schedule, and publish age-appropriate global assessments.", items: ["2026 Global Leader Challenge · Published", "Pioneer Spring Challenge · Draft", "Explorer Foundations · Published"] },
-  "Question Bank": { title: "Question bank", copy: "Organize scenario questions across the six Future Mind capabilities.", items: ["Critical Thinking · 48 questions", "Ethical Decision-Making · 42 questions", "Global Citizenship · 36 questions"] },
-  Participants: { title: "Participants", copy: "Review registrations, consent status, and assessment progress.", items: ["1,284 total registrations", "1,106 consent records complete", "47 currently taking a challenge"] },
-  Results: { title: "Results & insights", copy: "Explore performance by pathway, capability, country, and challenge cycle.", items: ["Average assessment score · 78%", "Strongest capability · Creativity & Foresight", "Growth opportunity · Ethical Decision-Making"] },
-  Certificates: { title: "Certificate center", copy: "Manage templates, issued credentials, and verification status.", items: ["836 credentials issued", "128 Global Distinctions", "0 verification alerts"] },
-  "Website Content": { title: "Website content", copy: "Edit homepage messages, pathways, focus areas, and calls to action.", items: ["Homepage · Published", "Six capabilities · Published", "Recognition page · Published"] },
-  Appearance: { title: "Brand appearance", copy: "Control approved colors, typography, imagery, logo, and social preview.", items: ["Theme · Midnight & Cyan", "Typography · Geist + Georgia", "Logo · Future Mind Global"] },
-  Administrators: { title: "Administrators", copy: "Assign secure roles and manage access to sensitive platform functions.", items: ["Owner · Full access", "Assessment editor · Content only", "Results reviewer · Read only"] },
-  "Audit Log": { title: "Audit log", copy: "See every important administrative change across the platform.", items: ["Challenge published · Today 09:42", "Homepage updated · Yesterday 16:18", "Certificate template approved · Jul 30"] },
-};
+export default function AdminPage(){
+  const [authLoading,setAuthLoading]=useState(true); const [loading,setLoading]=useState(true);
+  const [user,setUser]=useState<User|null>(null); const [role,setRole]=useState<PlatformRole|null>(null);
+  const [section,setSection]=useState("Overview"); const [menu,setMenu]=useState(false); const [notice,setNotice]=useState("");
+  const [groups,setGroups]=useState<Group[]>([]); const [questions,setQuestions]=useState<Question[]>([]); const [exams,setExams]=useState<Exam[]>([]);
+  const [enrollments,setEnrollments]=useState<Enrollment[]>([]); const [requests,setRequests]=useState<CertificateRequest[]>([]); const [profiles,setProfiles]=useState<Profile[]>([]); const [attempts,setAttempts]=useState<Attempt[]>([]);
+  const [selectedGroup,setSelectedGroup]=useState(""); const [showGroupForm,setShowGroupForm]=useState(false); const [showQuestionForm,setShowQuestionForm]=useState(false); const [showExamForm,setShowExamForm]=useState(false);
+  const [groupForm,setGroupForm]=useState({name:"",description:"",group_type:"practice",visibility:"hidden",show_answers:false,show_explanations:false});
+  const [questionForm,setQuestionForm]=useState({question_text:"",explanation:"",difficulty:2,options:["","","",""],correct:0});
+  const [examForm,setExamForm]=useState({title:"",pathway:"pioneer",group_id:"",opens_at:"",closes_at:"",time_limit_minutes:60,pass_percentage:70,requires_enrollment:true,fixed_finish:true,maximum_attempts:1,status:"draft"});
 
-export default function AdminPage() {
-  const [authLoading, setAuthLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<PlatformRole | null>(null);
-  const [section, setSection] = useState("Overview");
-  const [menu, setMenu] = useState(false);
-  const [toast, setToast] = useState("");
-  const panel = panels[section];
-  function notify(message: string) { setToast(message); window.setTimeout(() => setToast(""), 2600); }
+  function flash(text:string){setNotice(text); window.setTimeout(()=>setNotice(""),3000)}
+  const load = useCallback(async()=>{
+    setLoading(true);
+    const [g,q,e,en,cr,p,a]=await Promise.all([
+      supabase.from("question_groups").select("*").order("display_order"),
+      supabase.from("questions").select("id,group_id,question_text,explanation,difficulty,is_active").order("display_order"),
+      supabase.from("quizzes").select("*").order("created_at",{ascending:false}),
+      supabase.from("exam_enrollments").select("*").order("created_at",{ascending:false}),
+      supabase.from("certificate_requests").select("*").order("created_at",{ascending:false}),
+      supabase.from("profiles").select("id,full_name,email,role").order("created_at",{ascending:false}),
+      supabase.from("quiz_attempts").select("id,percentage")
+    ]);
+    setGroups((g.data??[]) as Group[]); setQuestions((q.data??[]) as Question[]); setExams((e.data??[]) as Exam[]); setEnrollments((en.data??[]) as Enrollment[]); setRequests((cr.data??[]) as CertificateRequest[]); setProfiles((p.data??[]) as Profile[]); setAttempts((a.data??[]) as Attempt[]);
+    if(!selectedGroup && g.data?.[0]) setSelectedGroup(g.data[0].id); setLoading(false);
+  },[selectedGroup]);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) { window.location.replace("/admin/login"); return; }
-      setUser(data.user);
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
-      setRole((profile?.role as PlatformRole) ?? "participant"); setAuthLoading(false);
-    });
-  }, []);
+  useEffect(()=>{supabase.auth.getUser().then(async({data})=>{if(!data.user){window.location.replace("/admin/login");return} setUser(data.user); const {data:profile}=await supabase.from("profiles").select("role").eq("id",data.user.id).single(); const next=(profile?.role as PlatformRole)??"participant"; setRole(next); setAuthLoading(false); if(["admin","editor","reviewer"].includes(next)) load();});},[load]);
+  async function signOut(){await supabase.auth.signOut();window.location.href="/admin/login"}
+  async function createGroup(e:React.FormEvent){e.preventDefault(); const {error}=await supabase.from("question_groups").insert({...groupForm,slug:`${slugify(groupForm.name)}-${Date.now().toString().slice(-5)}`,created_by:user?.id}); if(error) return flash(error.message); setShowGroupForm(false);setGroupForm({name:"",description:"",group_type:"practice",visibility:"hidden",show_answers:false,show_explanations:false});flash("Question group created");load()}
+  async function updateGroup(group:Group,patch:Partial<Group>){const {error}=await supabase.from("question_groups").update(patch).eq("id",group.id);if(error)flash(error.message);else{flash("Group updated");load()}}
+  async function renameGroup(group:Group){const name=window.prompt("New group name",group.name);if(name?.trim()) updateGroup(group,{name:name.trim(),slug:`${slugify(name)}-${group.id.slice(0,5)}`})}
+  async function createQuestion(e:React.FormEvent){e.preventDefault();if(!selectedGroup)return; const {data,error}=await supabase.from("questions").insert({group_id:selectedGroup,quiz_id:null,focus_area_id:null,question_text:questionForm.question_text,explanation:questionForm.explanation,difficulty:questionForm.difficulty}).select("id").single(); if(error)return flash(error.message); const options=questionForm.options.map((option_text,i)=>({question_id:data.id,option_text,is_correct:i===questionForm.correct,display_order:i})); const {error:optionError}=await supabase.from("question_options").insert(options); if(optionError)return flash(optionError.message); setShowQuestionForm(false);setQuestionForm({question_text:"",explanation:"",difficulty:2,options:["","","",""],correct:0});flash("Question added securely");load()}
+  async function createExam(e:React.FormEvent){e.preventDefault(); const {data,error}=await supabase.from("quizzes").insert({title:examForm.title,slug:`${slugify(examForm.title)}-${Date.now().toString().slice(-5)}`,description:"",pathway:examForm.pathway,status:examForm.status,time_limit_minutes:examForm.time_limit_minutes,pass_percentage:examForm.pass_percentage,distinction_percentile:90,retake_lock_hours:24,opens_at:examForm.opens_at?new Date(examForm.opens_at).toISOString():null,closes_at:examForm.closes_at?new Date(examForm.closes_at).toISOString():null,exam_timezone:"Asia/Riyadh",requires_enrollment:examForm.requires_enrollment,fixed_finish:examForm.fixed_finish,maximum_attempts:examForm.maximum_attempts,created_by:user?.id}).select("id").single(); if(error)return flash(error.message); if(examForm.group_id) await supabase.from("exam_question_groups").insert({quiz_id:data.id,group_id:examForm.group_id}); setShowExamForm(false);flash("Exam created");load()}
+  async function setExamStatus(exam:Exam,status:string){const {error}=await supabase.from("quizzes").update({status}).eq("id",exam.id);if(error)flash(error.message);else{flash(`Exam ${status}`);load()}}
+  async function reviewEnrollment(item:Enrollment,status:"approved"|"rejected"){const {error}=await supabase.from("exam_enrollments").update({status,reviewed_by:user?.id,reviewed_at:new Date().toISOString()}).eq("id",item.id);if(error)flash(error.message);else{flash(`Enrollment ${status}`);load()}}
+  async function reviewCertificate(item:CertificateRequest,status:"approved"|"rejected"){
+    const score=attempts.find(a=>a.id===item.attempt_id)?.percentage??0; const person=profiles.find(p=>p.id===item.participant_id); const exam=exams.find(e=>e.id===item.quiz_id);
+    if(status==="approved"){const {error}=await supabase.from("certificates").insert({attempt_id:item.attempt_id,participant_id:item.participant_id,quiz_id:item.quiz_id,level:score>=90?"distinction":"achievement",participant_name:person?.full_name||person?.email||"Participant",quiz_title:exam?.title||"Future Mind Assessment",score});if(error)return flash(error.message)}
+    const {error}=await supabase.from("certificate_requests").update({status,reviewed_by:user?.id,reviewed_at:new Date().toISOString()}).eq("id",item.id);if(error)flash(error.message);else{flash(`Certificate ${status}`);load()}
+  }
+  const profileName=(id:string)=>profiles.find(p=>p.id===id)?.full_name||profiles.find(p=>p.id===id)?.email||id.slice(0,8);
+  const examName=(id:string)=>exams.find(e=>e.id===id)?.title||"Unknown exam";
+  const groupQuestions=useMemo(()=>questions.filter(q=>q.group_id===selectedGroup),[questions,selectedGroup]);
 
-  async function signOut() { await supabase.auth.signOut(); window.location.href = "/admin/login"; }
-
-  if (authLoading) return <main className={styles.authState}><img src="/logo.jpg" alt=""/><span>Verifying secure access…</span></main>;
-  if (!role || !["admin","editor","reviewer"].includes(role)) return <main className={styles.authState}><img src="/logo.jpg" alt=""/><small>ACCESS PENDING</small><h1>Your account is verified.</h1><p>{user?.email}<br/>An administrator must assign your platform role before you can enter the console.</p><button onClick={signOut}>Sign out</button><a href="/">Return to website</a></main>;
-
+  if(authLoading)return <main className={styles.authState}><img src="/logo.jpg" alt=""/><span>Verifying secure access…</span></main>;
+  if(!role||!["admin","editor","reviewer"].includes(role))return <main className={styles.authState}><img src="/logo.jpg" alt=""/><small>ACCESS PENDING</small><h1>Your account is verified.</h1><p>{user?.email}<br/>An administrator must approve your role.</p><button onClick={signOut}>Sign out</button></main>;
   return <main className={styles.shell}>
-    <aside className={`${styles.sidebar} ${menu ? styles.open : ""}`}>
-      <a href="/" className={styles.brand}><img src="/logo.jpg" alt="Future Mind Global" /><span><b>FUTURE MIND</b><small>ADMIN CONSOLE</small></span></a>
-      <nav aria-label="Admin navigation">{navigation.map(([label, icon]) => <button key={label} className={section === label ? styles.active : ""} onClick={() => { setSection(label); setMenu(false); }}><i>{icon}</i>{label}{label === "Participants" && <em>1,284</em>}</button>)}</nav>
-      <div className={styles.sidebarFoot}><span className={styles.avatar}>FM</span><span><b>{user?.user_metadata?.full_name || "Platform Owner"}</b><small>{role}</small></span><button onClick={signOut} aria-label="Sign out">↪</button></div>
-    </aside>
-
-    <section className={styles.main}>
-      <header className={styles.topbar}><button className={styles.mobileMenu} onClick={() => setMenu(!menu)}>☰</button><div><span>ADMINISTRATION</span><b>{section}</b></div><div className={styles.topActions}><a href="/">View website ↗</a><button onClick={() => notify("No new alerts")}>♢<i /></button><span>FM</span></div></header>
-
-      {section === "Overview" ? <div className={styles.content}>
-        <div className={styles.welcome}><div><small>SUNDAY, 2 AUGUST 2026</small><h1>Good afternoon.</h1><p>Here is what is happening across Future Mind Global today.</p></div><button onClick={() => notify("Challenge creation will connect to the assessment database.")}>＋ Create challenge</button></div>
-
-        <div className={styles.stats}>
-          <article><div><span>◎</span><small>+12.4%</small></div><b>1,284</b><p>Total participants</p><em>Across 38 countries</em></article>
-          <article><div><span>◫</span><small>+8.1%</small></div><b>1,067</b><p>Completed assessments</p><em>83% completion rate</em></article>
-          <article><div><span>◇</span><small>+16.8%</small></div><b>836</b><p>Certificates issued</p><em>128 global distinctions</em></article>
-          <article><div><span>◷</span><small className={styles.live}>● LIVE</small></div><b>47</b><p>Taking a challenge</p><em>Current active sessions</em></article>
-        </div>
-
-        <div className={styles.grid}>
-          <article className={styles.performance}><div className={styles.cardHead}><div><small>PERFORMANCE</small><h2>Participation overview</h2></div><select aria-label="Period"><option>Last 6 months</option><option>Last 12 months</option></select></div><div className={styles.chart}><div className={styles.yaxis}><span>300</span><span>200</span><span>100</span><span>0</span></div><div className={styles.bars}>{[[38,52],[47,63],[44,71],[58,78],[66,87],[76,96]].map((v,i)=><div key={i}><span style={{height:`${v[0]}%`}}/><b style={{height:`${v[1]}%`}}/><small>{["Mar","Apr","May","Jun","Jul","Aug"][i]}</small></div>)}</div></div><div className={styles.legend}><span><i /> Registrations</span><span><i /> Completions</span></div></article>
-          <article className={styles.capabilities}><div className={styles.cardHead}><div><small>CAPABILITY INSIGHTS</small><h2>Average strengths</h2></div><button>•••</button></div>{[["Creativity & Foresight",88],["Critical Thinking",84],["Global Citizenship",81],["Empathy & Leadership",79],["Sustainable Problem-Solving",76],["Ethical Decision-Making",72]].map(([name,value])=><div className={styles.skillRow} key={name}><span>{name}</span><div><i style={{width:`${value}%`}}/></div><b>{value}%</b></div>)}</article>
-        </div>
-
-        <article className={styles.tableCard}><div className={styles.cardHead}><div><small>LIVE ACTIVITY</small><h2>Recent participants</h2></div><button onClick={() => setSection("Participants")}>View all participants →</button></div><div className={styles.tableWrap}><table><thead><tr><th>Participant</th><th>Pathway</th><th>Score</th><th>Recognition</th><th>Activity</th><th /></tr></thead><tbody>{participants.map((p,i)=><tr key={p[0]}><td><span className={styles.person}>{p[0].split(" ").map(x=>x[0]).join("")}</span><b>{p[0]}</b></td><td>{p[1]}</td><td><b>{p[2]}</b></td><td><span className={`${styles.badge} ${p[3] === "Distinction" ? styles.gold : p[3] === "In progress" ? styles.progress : ""}`}>{p[3]}</span></td><td>{p[4]}</td><td><button>•••</button></td></tr>)}</tbody></table></div></article>
-      </div> : <div className={styles.content}><div className={styles.welcome}><div><small>PLATFORM MANAGEMENT</small><h1>{panel.title}</h1><p>{panel.copy}</p></div><button onClick={() => notify(`${section} editor is ready for database connection.`)}>＋ Add new</button></div><article className={styles.manager}><div className={styles.managerVisual}><span>{navigation.find(n=>n[0]===section)?.[1]}</span></div><div><small>DEMONSTRATION VIEW</small><h2>{panel.title}</h2><p>{panel.copy}</p><ul>{panel.items.map(item=><li key={item}><span>✓</span>{item}<button onClick={() => notify("Editing will be enabled after secure database connection.")}>Edit</button></li>)}</ul></div></article></div>}
-    </section>
-    {toast && <div className={styles.toast}>✓ {toast}</div>}
-  </main>;
+    <aside className={`${styles.sidebar} ${menu?styles.open:""}`}><a href="/" className={styles.brand}><img src="/logo.jpg" alt="Future Mind Global"/><span><b>FUTURE MIND</b><small>ADMIN CONSOLE</small></span></a><nav>{nav.map(label=><button key={label} className={section===label?styles.active:""} onClick={()=>{setSection(label);setMenu(false)}}><i>{label==="Overview"?"⌂":label==="Question Bank"?"?":label==="Exams & Schedule"?"◫":label==="Enrollments"?"◎":label==="Certificate Approval"?"◇":"◉"}</i>{label}</button>)}</nav><div className={styles.sidebarFoot}><span className={styles.avatar}>FM</span><span><b>{user?.user_metadata?.full_name||"Platform Owner"}</b><small>{role}</small></span><button onClick={signOut}>↪</button></div></aside>
+    <section className={styles.main}><header className={styles.topbar}><button className={styles.mobileMenu} onClick={()=>setMenu(!menu)}>☰</button><div><span>ADMINISTRATION</span><b>{section}</b></div><div className={styles.topActions}><a href="/exams">Student exam area ↗</a><span>FM</span></div></header>
+    <div className={styles.content}>{loading?<div className={styles.loading}>Loading secure platform data…</div>:<>
+      {section==="Overview"&&<><div className={styles.welcome}><div><small>LIVE PLATFORM CONTROL</small><h1>Exam operations</h1><p>Private question banks, scheduled sessions, enrolments, and certificate approvals.</p></div><button onClick={()=>setSection("Exams & Schedule")}>＋ Create exam</button></div><div className={styles.stats}><article><div><span>?</span></div><b>{groups.length}</b><p>Question groups</p><em>{questions.length} secure questions</em></article><article><div><span>◫</span></div><b>{exams.length}</b><p>Exam sessions</p><em>{exams.filter(e=>e.status==="published").length} published</em></article><article><div><span>◎</span></div><b>{enrollments.filter(e=>e.status==="pending").length}</b><p>Pending enrolments</p><em>Awaiting review</em></article><article><div><span>◇</span></div><b>{requests.filter(r=>r.status==="pending").length}</b><p>Certificate approvals</p><em>Admin action required</em></article></div></>}
+      {section==="Question Bank"&&<><PageTitle eyebrow="PRIVATE CONTENT" title="Question bank" copy="Create fully editable groups and control what students may see." action="＋ New group" onAction={()=>setShowGroupForm(!showGroupForm)}/>{showGroupForm&&<form className={styles.editorForm} onSubmit={createGroup}><input required placeholder="Group name" value={groupForm.name} onChange={e=>setGroupForm({...groupForm,name:e.target.value})}/><input placeholder="Description" value={groupForm.description} onChange={e=>setGroupForm({...groupForm,description:e.target.value})}/><select value={groupForm.group_type} onChange={e=>setGroupForm({...groupForm,group_type:e.target.value})}>{groupTypes.map(x=><option key={x} value={x}>{nice(x)}</option>)}</select><select value={groupForm.visibility} onChange={e=>setGroupForm({...groupForm,visibility:e.target.value})}>{visibilityOptions.map(x=><option key={x}>{x}</option>)}</select><label><input type="checkbox" checked={groupForm.show_answers} onChange={e=>setGroupForm({...groupForm,show_answers:e.target.checked})}/> Show answers</label><label><input type="checkbox" checked={groupForm.show_explanations} onChange={e=>setGroupForm({...groupForm,show_explanations:e.target.checked})}/> Show explanations</label><button>Create group</button></form>}<div className={styles.workspace}><div className={styles.groupList}>{groups.map(g=><button key={g.id} className={selectedGroup===g.id?styles.selected:""} onClick={()=>setSelectedGroup(g.id)}><b>{g.name}</b><small>{nice(g.group_type)} · {g.visibility}</small><span>{questions.filter(q=>q.group_id===g.id).length}</span></button>)}</div><div className={styles.questionPanel}>{selectedGroup&&<><div className={styles.panelActions}><div><h2>{groups.find(g=>g.id===selectedGroup)?.name}</h2><p>Correct answers remain hidden from students during secure exams.</p></div><button onClick={()=>setShowQuestionForm(!showQuestionForm)}>＋ Add question</button></div>{showQuestionForm&&<form className={styles.questionForm} onSubmit={createQuestion}><textarea required placeholder="Question text" value={questionForm.question_text} onChange={e=>setQuestionForm({...questionForm,question_text:e.target.value})}/>{questionForm.options.map((value,i)=><label key={i}><input type="radio" name="correct" checked={questionForm.correct===i} onChange={()=>setQuestionForm({...questionForm,correct:i})}/><input required placeholder={`Answer option ${i+1}`} value={value} onChange={e=>{const options=[...questionForm.options];options[i]=e.target.value;setQuestionForm({...questionForm,options})}}/></label>)}<textarea placeholder="Explanation (optional)" value={questionForm.explanation} onChange={e=>setQuestionForm({...questionForm,explanation:e.target.value})}/><button>Save secure question</button></form>}<div className={styles.rows}>{groupQuestions.map((q,i)=><article key={q.id}><span>{String(i+1).padStart(2,"0")}</span><div><b>{q.question_text}</b><small>Difficulty {q.difficulty} · {q.is_active?"Active":"Hidden"}</small></div></article>)}{!groupQuestions.length&&<div className={styles.empty}>No questions in this group yet.</div>}</div><div className={styles.groupControls}>{groups.filter(g=>g.id===selectedGroup).map(g=><div key={g.id}><button onClick={()=>renameGroup(g)}>Rename group</button><select value={g.visibility} onChange={e=>updateGroup(g,{visibility:e.target.value})}>{visibilityOptions.map(x=><option key={x}>{x}</option>)}</select><button onClick={()=>updateGroup(g,{is_active:!g.is_active})}>{g.is_active?"Hide group":"Show group"}</button></div>)}</div></>}</div></div></>}
+      {section==="Exams & Schedule"&&<><PageTitle eyebrow="SCHEDULE & PUBLISH" title="Exam sessions" copy="Control dates, synchronized finish times, eligibility, attempts, and pass scores." action="＋ New exam" onAction={()=>setShowExamForm(!showExamForm)}/>{showExamForm&&<form className={styles.editorForm} onSubmit={createExam}><input required placeholder="Exam title" value={examForm.title} onChange={e=>setExamForm({...examForm,title:e.target.value})}/><select required value={examForm.group_id} onChange={e=>setExamForm({...examForm,group_id:e.target.value})}><option value="">Select question group</option>{groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select><label>Opens<input type="datetime-local" value={examForm.opens_at} onChange={e=>setExamForm({...examForm,opens_at:e.target.value})}/></label><label>Closes<input type="datetime-local" value={examForm.closes_at} onChange={e=>setExamForm({...examForm,closes_at:e.target.value})}/></label><label>Minutes<input type="number" min="5" value={examForm.time_limit_minutes} onChange={e=>setExamForm({...examForm,time_limit_minutes:+e.target.value})}/></label><label>Pass %<input type="number" min="1" max="100" value={examForm.pass_percentage} onChange={e=>setExamForm({...examForm,pass_percentage:+e.target.value})}/></label><label><input type="checkbox" checked={examForm.requires_enrollment} onChange={e=>setExamForm({...examForm,requires_enrollment:e.target.checked})}/> Require enrolment approval</label><label><input type="checkbox" checked={examForm.fixed_finish} onChange={e=>setExamForm({...examForm,fixed_finish:e.target.checked})}/> Everyone finishes together</label><button>Create exam</button></form>}<DataTable headers={["Exam","Schedule","Controls","Status"]}>{exams.map(e=><tr key={e.id}><td><b>{e.title}</b><small>{e.time_limit_minutes} min · Pass {e.pass_percentage}%</small></td><td>{e.opens_at?new Date(e.opens_at).toLocaleString():"Any time"}<small>{e.closes_at?`Closes ${new Date(e.closes_at).toLocaleString()}`:"No closing date"}</small></td><td>{e.requires_enrollment?"Approval required":"Open to registered users"}<small>{e.fixed_finish?"Fixed finish":"Individual duration"}</small></td><td><span className={styles.status}>{e.status}</span><button className={styles.rowAction} onClick={()=>setExamStatus(e,e.status==="published"?"draft":"published")}>{e.status==="published"?"Unpublish":"Publish"}</button></td></tr>)}</DataTable></>}
+      {section==="Enrollments"&&<><PageTitle eyebrow="ELIGIBILITY" title="Exam enrolments" copy="Approve students before they enter restricted exams."/><DataTable headers={["Student","Exam","Requested","Decision"]}>{enrollments.map(e=><tr key={e.id}><td><b>{profileName(e.participant_id)}</b></td><td>{examName(e.quiz_id)}</td><td>{new Date(e.created_at).toLocaleString()}<small>{e.status}</small></td><td>{e.status==="pending"?<><button className={styles.approve} onClick={()=>reviewEnrollment(e,"approved")}>Approve</button><button className={styles.reject} onClick={()=>reviewEnrollment(e,"rejected")}>Reject</button></>:nice(e.status)}</td></tr>)}</DataTable></>}
+      {section==="Certificate Approval"&&<><PageTitle eyebrow="MANUAL REVIEW" title="Certificate approval" copy="Certificates are issued only after an administrator reviews the result."/><DataTable headers={["Student","Exam","Score","Decision"]}>{requests.map(r=><tr key={r.id}><td><b>{profileName(r.participant_id)}</b></td><td>{examName(r.quiz_id)}</td><td>{attempts.find(a=>a.id===r.attempt_id)?.percentage??0}%<small>{r.status}</small></td><td>{r.status==="pending"?<><button className={styles.approve} onClick={()=>reviewCertificate(r,"approved")}>Issue certificate</button><button className={styles.reject} onClick={()=>reviewCertificate(r,"rejected")}>Reject</button></>:nice(r.status)}</td></tr>)}</DataTable></>}
+      {section==="Participants"&&<><PageTitle eyebrow="ACCOUNTS" title="Participants" copy="View registered students and their platform roles."/><DataTable headers={["Name","Email","Role","Access"]}>{profiles.map(p=><tr key={p.id}><td><b>{p.full_name||"Unnamed participant"}</b></td><td>{p.email}</td><td>{nice(p.role)}</td><td>{p.role==="participant"?"Student portal":"Administration"}</td></tr>)}</DataTable></>}
+    </>}</div></section>{notice&&<div className={styles.toast}>✓ {notice}</div>}
+  </main>
 }
+
+function PageTitle({eyebrow,title,copy,action,onAction}:{eyebrow:string;title:string;copy:string;action?:string;onAction?:()=>void}){return <div className={styles.welcome}><div><small>{eyebrow}</small><h1>{title}</h1><p>{copy}</p></div>{action&&<button onClick={onAction}>{action}</button>}</div>}
+function DataTable({headers,children}:{headers:string[];children:React.ReactNode}){return <article className={styles.dataCard}><div className={styles.tableWrap}><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div></article>}

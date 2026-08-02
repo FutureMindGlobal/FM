@@ -12,6 +12,11 @@ export default function AdminLogin() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
+  async function openWorkspace(userId: string) {
+    const { data } = await supabase.from("profiles").select("role").eq("id", userId).single();
+    window.location.href = data?.role === "participant" ? "/exams" : "/admin";
+  }
+
   useEffect(() => {
     const recoveryLink = window.location.hash.includes("type=recovery");
     if (recoveryLink) setMode("recovery");
@@ -21,7 +26,7 @@ export default function AdminLogin() {
     });
 
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session && !recoveryLink) window.location.href = "/admin";
+      if (data.session && !recoveryLink) openWorkspace(data.session.user.id);
     });
 
     return () => listener.subscription.unsubscribe();
@@ -32,11 +37,11 @@ export default function AdminLogin() {
     if (mode === "signup") {
       const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName }, emailRedirectTo: `${window.location.origin}/admin` } });
       if (error) setMessage(error.message);
-      else if (data.session) window.location.href = "/admin";
+      else if (data.session) openWorkspace(data.session.user.id);
       else setMessage("Account created. Check your email and confirm the address, then sign in.");
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setMessage(error.message); else window.location.href = "/admin";
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setMessage(error.message); else if (data.user) openWorkspace(data.user.id);
     }
     setBusy(false);
   }

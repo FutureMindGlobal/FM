@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { supabase, type PlatformRole } from "../../lib/supabase";
 import styles from "./Admin.module.css";
 
 const navigation = [
@@ -30,17 +32,34 @@ const panels: Record<string, { title: string; copy: string; items: string[] }> =
 };
 
 export default function AdminPage() {
+  const [authLoading, setAuthLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [role, setRole] = useState<PlatformRole | null>(null);
   const [section, setSection] = useState("Overview");
   const [menu, setMenu] = useState(false);
   const [toast, setToast] = useState("");
   const panel = panels[section];
   function notify(message: string) { setToast(message); window.setTimeout(() => setToast(""), 2600); }
 
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) { window.location.replace("/admin/login"); return; }
+      setUser(data.user);
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+      setRole((profile?.role as PlatformRole) ?? "participant"); setAuthLoading(false);
+    });
+  }, []);
+
+  async function signOut() { await supabase.auth.signOut(); window.location.href = "/admin/login"; }
+
+  if (authLoading) return <main className={styles.authState}><img src="/logo.jpg" alt=""/><span>Verifying secure access…</span></main>;
+  if (!role || !["admin","editor","reviewer"].includes(role)) return <main className={styles.authState}><img src="/logo.jpg" alt=""/><small>ACCESS PENDING</small><h1>Your account is verified.</h1><p>{user?.email}<br/>An administrator must assign your platform role before you can enter the console.</p><button onClick={signOut}>Sign out</button><a href="/">Return to website</a></main>;
+
   return <main className={styles.shell}>
     <aside className={`${styles.sidebar} ${menu ? styles.open : ""}`}>
       <a href="/" className={styles.brand}><img src="/logo.jpg" alt="Future Mind Global" /><span><b>FUTURE MIND</b><small>ADMIN CONSOLE</small></span></a>
       <nav aria-label="Admin navigation">{navigation.map(([label, icon]) => <button key={label} className={section === label ? styles.active : ""} onClick={() => { setSection(label); setMenu(false); }}><i>{icon}</i>{label}{label === "Participants" && <em>1,284</em>}</button>)}</nav>
-      <div className={styles.sidebarFoot}><span className={styles.avatar}>FM</span><span><b>Platform Owner</b><small>Administrator</small></span><button aria-label="Account menu">•••</button></div>
+      <div className={styles.sidebarFoot}><span className={styles.avatar}>FM</span><span><b>{user?.user_metadata?.full_name || "Platform Owner"}</b><small>{role}</small></span><button onClick={signOut} aria-label="Sign out">↪</button></div>
     </aside>
 
     <section className={styles.main}>

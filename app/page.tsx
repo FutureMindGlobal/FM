@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabase";
+
+type SiteNav={id:string;label:string;href:string};
+type FooterSettings={tagline:string;copyright_text:string;contact_email:string|null;is_visible:boolean};
+type PopupMedia={kind:"image"|"video"|"audio";public_url:string|null;alt_text:string;caption:string|null};
+type SitePopup={id:string;title:string;body_text:string|null;button_text:string|null;button_url:string|null;frequency:string;position:string;audience:string;media_assets:PopupMedia|null};
 
 const skills = [
   { n: "01", icon: "✦", title: "Critical Thinking", text: "Question assumptions, interpret evidence, and make sound judgments in uncertain situations.", color: "cyan" },
@@ -33,6 +39,9 @@ export default function Home() {
   const [answers, setAnswers] = useState<number[]>([]);
   const [email, setEmail] = useState("");
   const [notice, setNotice] = useState("");
+  const [siteNav,setSiteNav]=useState<SiteNav[]>([]);
+  const [footerSettings,setFooterSettings]=useState<FooterSettings|null|undefined>(undefined);
+  const [popup,setPopup]=useState<SitePopup|null>(null);
   const selectedLevel = levels.find((item) => item.id === level) ?? levels[2];
   const finished = step >= questions.length;
   const score = useMemo(() => answers.reduce((sum, answer, i) => sum + (answer === questions[i].correct ? 1 : 0), 0), [answers]);
@@ -42,23 +51,23 @@ export default function Home() {
     return () => { document.body.style.overflow = ""; };
   }, [quizOpen]);
 
+  useEffect(()=>{let alive=true;(async()=>{const [{data:theme},{data:navigation},{data:footer},{data:sections},{data:popups},{data:{user}}]=await Promise.all([supabase.from("site_theme").select("*").single(),supabase.from("navigation_items").select("*").eq("location","header").order("display_order"),supabase.from("footer_settings").select("*").maybeSingle(),supabase.from("page_sections").select("*").eq("page_path","/").order("display_order"),supabase.from("popups").select("*,media_assets(kind,public_url,alt_text,caption)").contains("pages",["/"]).order("priority",{ascending:false}),supabase.auth.getUser()]);if(!alive)return;if(theme){const vars:Record<string,string>={"--navy":theme.primary_color,"--navy-2":theme.secondary_color,"--cyan":theme.accent_color,"--cream":theme.background_color,"--surface":theme.surface_color,"--ink":theme.text_color,"--muted":theme.muted_text_color,"--menu-text":theme.menu_text_color,"--heading-font":theme.heading_font,"--body-font":theme.body_font,"--base-size":`${theme.base_font_size}px`,"--heading-scale":String(theme.heading_scale),"--line-height":String(theme.line_height),"--letter-spacing":`${theme.letter_spacing}px`,"--content-width":`${theme.content_width}px`,"--section-space":`${theme.section_spacing}px`,"--button-radius":`${theme.button_radius}px`,"--card-radius":`${theme.card_radius}px`};Object.entries(vars).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));}setSiteNav((navigation||[]) as SiteNav[]);setFooterSettings((footer as FooterSettings)||null);(sections||[]).forEach((s:any)=>{const el=document.getElementById(s.section_key);if(!el)return;el.hidden=!s.is_visible;el.style.order=String(s.display_order);if(s.background_color)el.style.background=s.background_color;if(s.content?.title){const heading=el.querySelector("h1,h2");if(heading)heading.textContent=s.content.title;}});let role="visitor";if(user){const {data:p}=await supabase.from("profiles").select("role").eq("id",user.id).maybeSingle();role=p?.role==="participant"?"students":"staff";}const candidate=(popups||[]).find((p:any)=>p.audience==="everyone"||(p.audience==="visitors"&&role==="visitor")||p.audience===role) as SitePopup|undefined;if(candidate){const key=`fmg-popup-${candidate.id}`;const seen=candidate.frequency==="once_day"?localStorage.getItem(key)===new Date().toISOString().slice(0,10):candidate.frequency==="once_session"?sessionStorage.getItem(key)==="1":false;if(!seen)setTimeout(()=>alive&&setPopup(candidate),500);}})();return()=>{alive=false};},[]);
+  useEffect(()=>{supabase.rpc("get_public_page_layout",{requested_path:"/"}).then(({data})=>(data||[]).forEach((s:any)=>{const el=document.getElementById(s.section_key);if(!el)return;el.hidden=!s.is_visible;el.style.order=String(s.display_order);if(s.background_color)el.style.background=s.background_color;if(s.title_override){const heading=el.querySelector("h1,h2");if(heading)heading.textContent=s.title_override;}}))},[]);
+  function closePopup(){if(!popup)return;const key=`fmg-popup-${popup.id}`;if(popup.frequency==="once_day")localStorage.setItem(key,new Date().toISOString().slice(0,10));if(popup.frequency==="once_session")sessionStorage.setItem(key,"1");setPopup(null)}
+
   function startQuiz() { setStep(0); setAnswers([]); setQuizOpen(true); }
   function answer(index: number) { setAnswers((old) => [...old, index]); setStep((old) => old + 1); }
   function subscribe(e: React.FormEvent) { e.preventDefault(); setNotice(email ? "You’re on the early-access list." : "Please enter your email address."); }
 
   return (
-    <main>
+    <main className="site-root">
       <header className="nav-shell">
         <a className="brand" href="#top" aria-label="Future Mind Global home">
           <img src="/logo.jpg" alt="Future Mind Global" />
           <span><b>FUTURE MIND</b><small>GLOBAL</small></span>
         </a>
         <nav className={menu ? "nav-links open" : "nav-links"} aria-label="Main navigation">
-          <a href="#skills" onClick={() => setMenu(false)}>Future Skills</a>
-          <a href="#pathways" onClick={() => setMenu(false)}>Learning</a>
-          <a href="#challenge" onClick={() => setMenu(false)}>Global Challenge</a>
-          <a href="#recognition" onClick={() => setMenu(false)}>Recognition</a>
-          <a href="#verify" onClick={() => setMenu(false)}>Verify</a>
+          {siteNav.map(item=><a key={item.id} href={item.href} onClick={()=>setMenu(false)}>{item.label}</a>)}
         </nav>
         <button className="nav-cta" onClick={startQuiz}>Try a scenario <ArrowIcon /></button>
         <button className="menu-btn" onClick={() => setMenu(!menu)} aria-label="Toggle navigation" aria-expanded={menu}>{menu ? "×" : "☰"}</button>
@@ -86,7 +95,7 @@ export default function Home() {
         <div className="scroll-note">SCROLL TO DISCOVER <span>↓</span></div>
       </section>
 
-      <section className="statement">
+      <section className="statement" id="statement">
         <p>Beyond grades. Beyond memorization.</p>
         <h2>The future belongs to people who can <span>think clearly</span>, <span>choose wisely</span>, and <span>act together.</span></h2>
       </section>
@@ -125,9 +134,11 @@ export default function Home() {
 
       <section className="verify-section" id="verify"><div><div className="eyebrow"><span /> Trust built in</div><h2>Every achievement.<br /><em>Instantly verifiable.</em></h2></div><form onSubmit={(e) => { e.preventDefault(); setNotice("Demo credential FMG-2026-1048 is valid."); }}><label htmlFor="certificate">Enter a certificate ID</label><div><input id="certificate" defaultValue="FMG-2026-1048" /><button>Verify credential <ArrowIcon /></button></div><small>{notice || "Try the sample credential to preview verification."}</small></form></section>
 
-      <section className="cta-section"><div className="mini-orbit" /><div className="eyebrow"><span /> The future is already asking</div><h2>How will <em>you</em> answer?</h2><p>Be among the first to experience the Global Future Skills Challenge.</p><form onSubmit={subscribe}><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email address" aria-label="Email address" /><button>Get early access <ArrowIcon /></button></form><small>{notice}</small></section>
+      <section className="cta-section" id="cta"><div className="mini-orbit" /><div className="eyebrow"><span /> The future is already asking</div><h2>How will <em>you</em> answer?</h2><p>Be among the first to experience the Global Future Skills Challenge.</p><form onSubmit={subscribe}><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email address" aria-label="Email address" /><button>Get early access <ArrowIcon /></button></form><small>{notice}</small></section>
 
-      <footer><div className="footer-brand"><img src="/logo.jpg" alt="Future Mind Global" /><p>Developing the human capabilities<br />that shape a better future.</p></div><div><strong>Explore</strong><a href="#skills">Future Skills</a><a href="#pathways">Learning pathways</a><a href="#challenge">Global Challenge</a></div><div><strong>About</strong><a href="#top">Our mission</a><a href="#recognition">Recognition</a><a href="#verify">Verify certificate</a></div><div className="footer-note"><strong>GLOBAL • INCLUSIVE • FUTURE-READY</strong><p>© 2026 Future Mind Global.<br />All rights reserved.</p></div></footer>
+      {footerSettings!==null&&<footer id="footer"><div className="footer-brand"><img src="/logo.jpg" alt="Future Mind Global" /><p>{footerSettings?.tagline||"Developing the human capabilities that shape a better future."}</p></div><div><strong>Explore</strong>{siteNav.slice(0,3).map(item=><a key={item.id} href={item.href}>{item.label}</a>)}</div><div><strong>Connect</strong>{footerSettings?.contact_email&&<a href={`mailto:${footerSettings.contact_email}`}>{footerSettings.contact_email}</a>}<a href="/exams">Student exams</a></div><div className="footer-note"><strong>GLOBAL • INCLUSIVE • FUTURE-READY</strong><p>{footerSettings?.copyright_text||"© 2026 Future Mind Global. All rights reserved."}</p></div></footer>}
+
+      {popup&&<div className={`site-popup ${popup.position}`} role="dialog" aria-modal="true" aria-label={popup.title}><div className="site-popup-card"><button className="site-popup-close" onClick={closePopup} aria-label="Close announcement">×</button>{popup.media_assets?.public_url&&(popup.media_assets.kind==="image"?<img src={popup.media_assets.public_url} alt={popup.media_assets.alt_text}/>:popup.media_assets.kind==="video"?<video src={popup.media_assets.public_url} controls playsInline aria-label={popup.media_assets.alt_text}/>:<audio src={popup.media_assets.public_url} controls aria-label={popup.media_assets.alt_text}/>)}<div className="site-popup-copy"><h2>{popup.title}</h2>{popup.body_text&&<p>{popup.body_text}</p>}{popup.button_text&&popup.button_url&&<a className="button primary" href={popup.button_url}>{popup.button_text}</a>}</div></div></div>}
 
       {quizOpen && <div className="modal" role="dialog" aria-modal="true" aria-label="Sample challenge"><div className="modal-card"><button className="modal-close" onClick={() => setQuizOpen(false)} aria-label="Close">×</button>{!finished ? <><div className="modal-progress"><span style={{ width: `${((step + 1) / questions.length) * 100}%` }} /></div><div className="modal-meta"><span>{questions[step].area}</span><small>{step + 1} of {questions.length}</small></div><h2>{questions[step].q}</h2><div className="options">{questions[step].options.map((option, i) => <button key={option} onClick={() => answer(i)}><span>{String.fromCharCode(65 + i)}</span>{option}</button>)}</div><p className="modal-hint">Choose the response that demonstrates the strongest judgment.</p></> : <div className="result"><span className="result-icon">✦</span><small>SAMPLE COMPLETE</small><h2>Your thinking profile is taking shape.</h2><div className="score-ring"><b>{Math.round((score / questions.length) * 100)}</b><span>sample score</span></div><p>You showed strength in ethical judgment and collaborative leadership. The full challenge creates a profile across all six capabilities.</p><button className="button primary" onClick={() => setQuizOpen(false)}>Return to the experience</button></div>}</div></div>}
     </main>

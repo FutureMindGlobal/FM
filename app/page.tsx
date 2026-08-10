@@ -22,9 +22,11 @@ const skills = [
 ];
 
 const levels = [
-  { id: "explorer", label: "Explorer", ages: "Ages 10–12", kicker: "Build the foundations", title: "Curiosity becomes confident thinking.", text: "Short stories, visual scenarios, and guided reflection introduce the habits behind thoughtful choices.", meta: ["6 guided modules", "20-minute challenge", "Participation certificate"] },
-  { id: "pioneer", label: "Pioneer", ages: "Ages 13–15", kicker: "Navigate real choices", title: "Ideas meet real-world complexity.", text: "Students examine competing perspectives, collaborate on dilemmas, and learn to explain the reasoning behind their decisions.", meta: ["8 interactive modules", "30-minute challenge", "Achievement certificate"] },
-  { id: "leader", label: "Global Leader", ages: "Ages 16–18", kicker: "Prepare for what comes next", title: "Judgment becomes a visible strength.", text: "Advanced global scenarios assess the capabilities that matter in higher education, work, and responsible leadership.", meta: ["10 advanced modules", "45-minute challenge", "Global distinction eligibility"] },
+  { id: "explorer", label: "Explorer", ages: "Ages 8-9", kicker: "Begin with curiosity", title: "Questions become confident thinking.", text: "Visual stories and guided choices introduce careful observation, empathy and reasoning.", meta: ["Age-appropriate scenarios", "Annual challenge", "Participation recognition"] },
+  { id: "discoverer", label: "Discoverer", ages: "Ages 10-11", kicker: "Connect ideas", title: "Curiosity grows into explanation.", text: "Students compare viewpoints, find evidence and explain why a choice is responsible.", meta: ["Interactive practice", "Annual challenge", "Achievement pathway"] },
+  { id: "pioneer", label: "Pioneer", ages: "Ages 12-13", kicker: "Navigate real choices", title: "Ideas meet real-world complexity.", text: "Students examine competing perspectives and learn to defend thoughtful decisions.", meta: ["Global scenarios", "Annual challenge", "Achievement recognition"] },
+  { id: "innovator", label: "Innovator", ages: "Ages 14-15", kicker: "Design better possibilities", title: "Insight becomes practical action.", text: "Complex challenges reward creative, ethical and sustainable problem-solving.", meta: ["Advanced scenarios", "Annual challenge", "Distinction pathway"] },
+  { id: "global-leader", label: "Global Leader", ages: "Ages 16-18", kicker: "Prepare for what comes next", title: "Judgment becomes a visible strength.", text: "Advanced global scenarios assess capabilities for education, work and responsible leadership.", meta: ["Global assessment", "Annual challenge", "Global distinction eligibility"] },
 ];
 
 const questions = [
@@ -37,7 +39,7 @@ function ArrowIcon() { return <span aria-hidden="true">↗</span>; }
 
 export default function Home() {
   const [menu, setMenu] = useState(false);
-  const [level, setLevel] = useState("leader");
+  const [level, setLevel] = useState("global-leader");
   const [quizOpen, setQuizOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -86,7 +88,7 @@ export default function Home() {
         <nav className={menu ? "nav-links open" : "nav-links"} aria-label="Main navigation">
           {siteNav.map(item=><a key={item.id} href={item.href} onClick={()=>setMenu(false)}>{item.label}</a>)}
         </nav>
-        <button className="nav-cta" onClick={startQuiz}>Try a scenario <ArrowIcon /></button>
+        <a className="nav-cta" href="/register">Register interest <ArrowIcon /></a>
         <button className="menu-btn" onClick={() => setMenu(!menu)} aria-label="Toggle navigation" aria-expanded={menu}>{menu ? "×" : "☰"}</button>
       </header>
 
@@ -97,8 +99,8 @@ export default function Home() {
         <h1>{top.title}<br /><em>{top.accent_title}</em></h1>
         <p className="hero-copy">{top.description}</p>
         <div className="hero-actions">
-          <button className="button primary" onClick={startQuiz}>{top.primary_button} <ArrowIcon /></button>
-          <a className="button ghost" href="#skills">{top.secondary_button} <span>↓</span></a>
+          <a className="button primary" href="/register">{top.primary_button} <ArrowIcon /></a>
+          <button className="button ghost" onClick={startQuiz}>{top.secondary_button} <ArrowIcon /></button>
         </div>
         <div className="hero-proof">
           <div className="faces"><span>AM</span><span>LK</span><span>SA</span><span>+</span></div>
@@ -134,7 +136,7 @@ export default function Home() {
           {levelItems.map((item:any) => <button key={item.id} className={level === item.id ? "active" : ""} onClick={() => setLevel(item.id)} role="tab" aria-selected={level === item.id}><b>{item.label}</b><small>{item.ages}</small></button>)}
         </div>
         <div className="level-panel">
-          <div className="level-visual"><div className="level-number">{level === "explorer" ? "01" : level === "pioneer" ? "02" : "03"}</div><div className="constellation">✦<span>·</span>✧<span>·</span>✦</div></div>
+          <div className="level-visual"><div className="level-number">{String(Math.max(1,levelItems.findIndex((x:any)=>x.id===level)+1)).padStart(2,"0")}</div><div className="constellation">✦<span>·</span>✧<span>·</span>✦</div></div>
           <div className="level-copy"><small>{currentLevel.kicker}</small><h3>{currentLevel.title}</h3><p>{currentLevel.text}</p><ul>{currentLevel.meta.map((m:string) => <li key={m}>✓ {m}</li>)}</ul><button className="text-link" onClick={startQuiz}>Preview this pathway <ArrowIcon /></button></div>
         </div>
       </section>

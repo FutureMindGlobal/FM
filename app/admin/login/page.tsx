@@ -13,8 +13,10 @@ export default function AdminLogin() {
   const [message, setMessage] = useState("");
 
   async function openWorkspace(userId: string) {
+    const requested = new URLSearchParams(window.location.search).get("next");
     const { data } = await supabase.from("profiles").select("role").eq("id", userId).single();
-    window.location.href = data?.role === "participant" ? "/exams" : "/admin";
+    const safeNext = requested && requested.startsWith("/") && !requested.startsWith("//") ? requested : null;
+    window.location.href = safeNext || (data?.role === "participant" ? "/dashboard" : "/admin");
   }
 
   useEffect(() => {
@@ -35,7 +37,8 @@ export default function AdminLogin() {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setMessage("");
     if (mode === "signup") {
-      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName }, emailRedirectTo: `${window.location.origin}/admin` } });
+      const next = new URLSearchParams(window.location.search).get("next") || "/dashboard";
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName }, emailRedirectTo: `${window.location.origin}${next}` } });
       if (error) setMessage(error.message);
       else if (data.session) openWorkspace(data.session.user.id);
       else setMessage("Account created. Check your email and confirm the address, then sign in.");

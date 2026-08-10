@@ -18,3 +18,11 @@ test("server-renders the secure admin and exam routes",async()=>{
   assert.equal(admin.status,200);assert.equal(studio.status,200);assert.equal(exams.status,200);
   assert.match(await admin.text(),/Verifying secure access/i);assert.match(await studio.text(),/Website Studio/i);assert.match(await exams.text(),/EXAM CENTRE|Checking your account/i);
 });
+
+test("server-renders annual competition routes",async()=>{
+  const [registration,dashboard,operations]=await Promise.all([render("/register"),render("/dashboard"),render("/admin/operations")]);
+  assert.equal(registration.status,200);assert.equal(dashboard.status,200);assert.equal(operations.status,200);
+  assert.match(await registration.text(),/GLOBAL FUTURE SKILLS CHALLENGE|Loading competition/i);
+  assert.match(await dashboard.text(),/Opening your Future Mind dashboard/i);
+  assert.match(await operations.text(),/Loading competition operations/i);
+});

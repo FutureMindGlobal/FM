@@ -57,6 +57,7 @@ export default function AdminPage(){
   },[selectedGroup]);
 
   useEffect(()=>{supabase.auth.getUser().then(async({data})=>{if(!data.user){window.location.replace("/admin/login");return}setUser(data.user);const {data:profile}=await supabase.from("profiles").select("role").eq("id",data.user.id).single();const next=(profile?.role as PlatformRole)??"participant";setRole(next);setAuthLoading(false);if(["admin","editor","reviewer"].includes(next))load()})},[load]);
+  useEffect(()=>{if(authLoading||!role||!["admin","editor","reviewer"].includes(role))return;const refresh=window.setTimeout(()=>{void load()},0);return()=>window.clearTimeout(refresh)},[section,authLoading,role,load]);
   async function signOut(){await supabase.auth.signOut();window.location.href="/admin/login"}
   const delivery=(id:string)=>deliveries.find(d=>d.quiz_id===id)||emptyDelivery(id);
   const questionCount=(id:string)=>{const ids=new Set(examGroups.filter(x=>x.quiz_id===id).map(x=>x.group_id));return questions.filter(q=>q.is_active&&q.group_id&&ids.has(q.group_id)).length};

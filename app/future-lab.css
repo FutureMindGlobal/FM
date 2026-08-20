@@ -1,0 +1,21 @@
+.future-lab-hero{position:relative;min-height:calc(100svh - 82px);padding:clamp(5rem,10vw,9rem) max(5vw,calc((100vw - var(--content-width))/2));overflow:hidden;isolation:isolate;background:#06152f;color:#fff;display:flex;flex-direction:column;justify-content:center}
+.future-lab-slides,.future-lab-slides img,.future-lab-shade{position:absolute;inset:0}
+.future-lab-slides{z-index:-3;background:#06152f}
+.future-lab-slides img{width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.035);transition:opacity .9s ease,transform 7s ease}
+.future-lab-slides img.active{opacity:1;transform:scale(1)}
+.future-lab-shade{z-index:-2;background:linear-gradient(90deg,rgba(5,18,43,.98) 0%,rgba(5,18,43,.88) 38%,rgba(5,18,43,.3) 70%,rgba(5,18,43,.12) 100%),linear-gradient(0deg,rgba(5,18,43,.58),transparent 50%)}
+.future-lab-content{position:relative;width:min(740px,58vw);animation:future-rise .7s ease both}
+.future-lab-hero h1{font-size:clamp(3.4rem,7.3vw,7.8rem);line-height:.88;letter-spacing:-.055em;text-wrap:balance;margin:.5rem 0 1.45rem}
+.future-lab-hero h1 em{color:#19d9ec;text-shadow:0 0 42px rgba(25,217,236,.22)}
+.future-lab-hero .hero-copy{max-width:650px;font-size:clamp(1rem,1.35vw,1.22rem);line-height:1.75;color:#dce9ff}
+.future-lab-hero .button.primary{background:linear-gradient(135deg,#19d9ec,#7b61ff);border-color:transparent;color:#06152f;box-shadow:0 16px 45px rgba(25,217,236,.22)}
+.future-lab-hero .button.primary:hover{transform:translateY(-3px);box-shadow:0 20px 55px rgba(123,97,255,.35)}
+.future-lab-badge{position:absolute;right:clamp(1.5rem,5vw,6rem);bottom:clamp(5rem,9vw,8rem);width:min(270px,24vw);padding:1.4rem 1.5rem;background:rgba(7,24,55,.82);border:1px solid rgba(255,255,255,.18);border-left:4px solid #ff6b6b;backdrop-filter:blur(16px);display:grid;gap:.45rem}
+.future-lab-badge small{color:#19d9ec;font-size:.68rem;letter-spacing:.16em}.future-lab-badge strong{font-family:var(--heading-font),serif;font-size:1.25rem;line-height:1.25}
+.future-lab-dots{display:flex;gap:.6rem;margin-top:2rem}.future-lab-dots button{width:34px;height:5px;padding:0;border:0;border-radius:99px;background:rgba(255,255,255,.32);cursor:pointer;transition:.25s}.future-lab-dots button.active{width:58px;background:#ff6b6b}
+.skills-section{background:linear-gradient(180deg,#fffaf1 0%,#f7f4ff 100%)}
+.skill-card{transition:transform .25s ease,box-shadow .25s ease}.skill-card:hover{transform:translateY(-7px);box-shadow:0 24px 65px rgba(16,35,75,.12)}
+.statement{background:linear-gradient(110deg,#fff4e6,#f5f2ff 52%,#eafcff)}
+@keyframes future-rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@media(max-width:800px){.future-lab-hero{min-height:760px;padding-top:7rem;padding-bottom:8rem}.future-lab-content{width:100%}.future-lab-shade{background:linear-gradient(0deg,rgba(5,18,43,.98) 8%,rgba(5,18,43,.83) 62%,rgba(5,18,43,.42))}.future-lab-slides img{object-position:68% center}.future-lab-hero h1{font-size:clamp(3.2rem,15vw,5.4rem)}.future-lab-badge{right:1.25rem;bottom:2.25rem;width:calc(100% - 2.5rem)}.future-lab-hero .hero-proof{display:none}}
+@media(prefers-reduced-motion:reduce){.future-lab-slides img,.future-lab-content{transition:none;animation:none}}

@@ -133,6 +133,13 @@ export default function RegisterPage() {
   function validWhatsApp(value: string) {
     return /^\+[1-9]\d{7,14}$/.test(value.replace(/[\s()-]/g, ""));
   }
+  async function processRegistrationEmails() {
+    const { error } = await supabase.functions.invoke(
+      "process-registration-emails",
+      { body: {} },
+    );
+    if (error) console.warn("Registration email remains queued", error.message);
+  }
   const assignedLevel = useMemo(() => {
     if (!individual.date_of_birth || !competition) return null;
     const age = ageAt(individual.date_of_birth, competition.eligibility_date);
@@ -186,8 +193,9 @@ export default function RegisterPage() {
       });
     setBusy(false);
     if (error) return setNotice(error.message);
+    void processRegistrationEmails();
     setNotice(
-      "Thank you. Your interest has been registered. A confirmation email will be sent when email delivery is enabled.",
+      "Thank you. Your interest has been registered. A confirmation email is on its way.",
     );
     setInterest(emptyInterest);
   }
@@ -295,8 +303,9 @@ export default function RegisterPage() {
       }
     }
     setBusy(false);
+    void processRegistrationEmails();
     setNotice(
-      "Registration submitted. You can follow its status in your dashboard.",
+      "Registration submitted. A confirmation email is on its way, and you can follow the status in your dashboard.",
     );
   }
   const interestOnly = !competition?.registration_enabled;

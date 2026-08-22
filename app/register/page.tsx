@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import styles from "./Register.module.css";
 
@@ -82,12 +82,14 @@ export default function RegisterPage() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [type, setType] = useState<"individual" | "school">("individual");
   const [interest, setInterest] = useState(emptyInterest);
   const [individual, setIndividual] = useState(emptyIndividual);
   const [school, setSchool] = useState(emptySchool);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const submittingRef = useRef(false);
   useEffect(() => {
     (async () => {
       const [c, l, co, p, u] = await Promise.all([
@@ -116,6 +118,7 @@ export default function RegisterPage() {
       setCountries((co.data || []) as Country[]);
       setPrices((p.data || []) as Price[]);
       setUserId(u.data.user?.id || null);
+      setUserEmail(u.data.user?.email || null);
     })();
   }, []);
   function ageAt(dob: string, date: string) {
@@ -133,10 +136,13 @@ export default function RegisterPage() {
   function validWhatsApp(value: string) {
     return /^\+[1-9]\d{7,14}$/.test(value.replace(/[\s()-]/g, ""));
   }
-  async function processRegistrationEmails() {
+  async function processRegistrationEmails(identifier: {
+    registration_id?: string;
+    registration_interest_id?: string;
+  }) {
     const { error } = await supabase.functions.invoke(
       "process-registration-emails",
-      { body: {} },
+      { body: identifier },
     );
     if (error) console.warn("Registration email remains queued", error.message);
   }
@@ -173,13 +179,14 @@ export default function RegisterPage() {
     : "Price will be confirmed";
   async function submitInterest(e: React.FormEvent) {
     e.preventDefault();
-    if (!competition) return;
+    if (!competition || submittingRef.current) return;
     if (!validWhatsApp(interest.whatsapp_number))
       return setNotice(
         "Enter the WhatsApp number with country code, for example +966501234567.",
       );
+    submittingRef.current = true;
     setBusy(true);
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("registration_interests")
       .insert({
         ...interest,
@@ -190,10 +197,13 @@ export default function RegisterPage() {
           type === "school" ? interest.organization_name : null,
         estimated_students:
           type === "school" ? interest.estimated_students : null,
-      });
+      })
+      .select("id")
+      .single();
     setBusy(false);
+    submittingRef.current = false;
     if (error) return setNotice(error.message);
-    void processRegistrationEmails();
+    void processRegistrationEmails({ registration_interest_id: data.id });
     setNotice(
       "Thank you. Your interest has been registered. A confirmation email is on its way.",
     );
@@ -201,7 +211,7 @@ export default function RegisterPage() {
   }
   async function submitRegistration(e: React.FormEvent) {
     e.preventDefault();
-    if (!competition || !userId) return;
+    if (!competition || !userId || submittingRef.current) return;
     if (type === "individual" && !assignedLevel)
       return setNotice(
         "The participant must be aged 8–18 on the competition eligibility date.",
@@ -214,96 +224,45 @@ export default function RegisterPage() {
       return setNotice(
         "Enter the WhatsApp number with country code, for example +966501234567.",
       );
+    submittingRef.current = true;
     setBusy(true);
-    if (type === "individual") {
-      const { data: participant, error } = await supabase
-        .from("participants")
-        .insert({
-          ...individual,
-          whatsapp_number: individual.whatsapp_number.replace(/[\s()-]/g, ""),
-          consent: undefined,
-          account_id: userId,
-          level_id: assignedLevel?.id,
+    setNotice("");
+    const common = {
+      competition_id: competition.id,
+      amount_minor: selectedPrice?.amount_minor || 0,
+      currency_code: selectedPrice?.currency_code || selectedCountry?.currency_code || "USD",
+      price_label: selectedPrice?.label || priceText,
+      checkout_url: selectedPrice?.checkout_url || null,
+    };
+    const { data, error } = type === "individual"
+      ? await supabase.rpc("submit_individual_competition_registration", {
+          payload: {
+            ...common,
+            ...individual,
+            guardian_email: individual.guardian_email.trim().toLowerCase(),
+            whatsapp_number: individual.whatsapp_number.replace(/[\s()-]/g, ""),
+            level_id: assignedLevel?.id,
+          },
         })
-        .select()
-        .single();
-      if (error) {
-        setBusy(false);
-        return setNotice(error.message);
-      }
-      await supabase.from("consent_records").insert([
-        {
-          participant_id: participant.id,
-          account_id: userId,
-          consent_type: "guardian",
-          consent_version: "2026.1",
-          granted: individual.consent,
-        },
-        {
-          participant_id: participant.id,
-          account_id: userId,
-          consent_type: "privacy",
-          consent_version: "2026.1",
-          granted: individual.consent,
-        },
-      ]);
-      const { error: rError } = await supabase
-        .from("competition_registrations")
-        .insert({
-          competition_id: competition.id,
-          participant_id: participant.id,
-          registration_type: "individual",
-          level_id: assignedLevel?.id,
-          amount_minor: selectedPrice?.amount_minor || 0,
-          currency_code:
-            selectedPrice?.currency_code || selectedCountry?.currency_code,
-          price_label: selectedPrice?.label || priceText,
-          checkout_url: selectedPrice?.checkout_url,
-          payment_status: selectedPrice?.amount_minor
-            ? "pending"
-            : "not_required",
-          consent_complete: individual.consent,
+      : await supabase.rpc("submit_school_competition_registration", {
+          payload: {
+            ...common,
+            ...school,
+            email: school.email.trim().toLowerCase(),
+            whatsapp_number: school.whatsapp_number.replace(/[\s()-]/g, ""),
+          },
         });
-      if (rError) {
-        setBusy(false);
-        return setNotice(rError.message);
-      }
-    } else {
-      const { data: org, error } = await supabase
-        .from("organizations")
-        .insert({
-          ...school,
-          whatsapp_number: school.whatsapp_number.replace(/[\s()-]/g, ""),
-          owner_id: userId,
-        })
-        .select()
-        .single();
-      if (error) {
-        setBusy(false);
-        return setNotice(error.message);
-      }
-      const { error: rError } = await supabase
-        .from("competition_registrations")
-        .insert({
-          competition_id: competition.id,
-          organization_id: org.id,
-          registration_type: "school",
-          amount_minor:
-            (selectedPrice?.amount_minor || 0) * school.expected_students,
-          currency_code:
-            selectedPrice?.currency_code || selectedCountry?.currency_code,
-          price_label: selectedPrice?.label || priceText,
-          checkout_url: selectedPrice?.checkout_url,
-          payment_status: selectedPrice?.amount_minor ? "pending" : "invoiced",
-          consent_complete: false,
-        });
-      if (rError) {
-        setBusy(false);
-        return setNotice(rError.message);
-      }
-    }
+    submittingRef.current = false;
     setBusy(false);
-    void processRegistrationEmails();
+    if (error) {
+      return setNotice(
+        error.message.includes("REGISTRATION_EMAIL_ALREADY_USED")
+          ? "This email address is already registered for this competition. Please open your dashboard to view the existing registration."
+          : error.message,
+      );
+    }
+    const registrationId = (data as { registration_id?: string } | null)?.registration_id;
+    if (registrationId) void processRegistrationEmails({ registration_id: registrationId });
     setNotice(
       "Registration submitted. A confirmation email is on its way, and you can follow the status in your dashboard.",
     );
@@ -460,6 +419,28 @@ export default function RegisterPage() {
           </div>
         ) : (
           <form onSubmit={submitRegistration} className={styles.form}>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "12px 16px",
+                background: "#f5f7f8",
+                border: "1px solid #dbe2e8",
+                fontSize: 12,
+              }}
+            >
+              <span>Signed in as <strong>{userEmail}</strong></span>
+              <a href="/dashboard">View existing registrations</a>
+            </div>
+            <div className={styles.callout}>
+              <b>One registration email per competition</b>
+              <p>
+                The same parent, guardian, or school email cannot be used for a
+                second registration in this competition.
+              </p>
+            </div>
             {type === "individual" ? (
               <>
                 <label>

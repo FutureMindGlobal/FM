@@ -1,6 +1,22 @@
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 
-const jsonHeaders = { "Content-Type": "application/json" };
+const allowedOrigins = new Set([
+  "https://futuremindglobal.org",
+  "https://www.futuremindglobal.org",
+]);
+
+function responseHeaders(request: Request) {
+  const origin = request.headers.get("origin") ?? "";
+  return {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": allowedOrigins.has(origin)
+      ? origin
+      : "https://www.futuremindglobal.org",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
+}
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({
@@ -30,6 +46,10 @@ function emailContent(name: string, templateKey: string) {
 }
 
 Deno.serve(async (request: Request) => {
+  const jsonHeaders = responseHeaders(request);
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: jsonHeaders });
+  }
   if (request.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: jsonHeaders });
   }
@@ -44,14 +64,24 @@ Deno.serve(async (request: Request) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: jobs, error: queueError } = await supabase
+  const body = await request.json().catch(() => ({}));
+  const registrationId = typeof body.registration_id === "string" ? body.registration_id : null;
+  const interestId = typeof body.registration_interest_id === "string" ? body.registration_interest_id : null;
+  if (!registrationId && !interestId) {
+    return new Response(JSON.stringify({ error: "A registration identifier is required" }), { status: 400, headers: jsonHeaders });
+  }
+  let queueQuery = supabase
     .from("registration_email_queue")
     .select("id,recipient_email,recipient_name,template_key,attempts")
     .eq("status", "pending")
     .lte("scheduled_for", new Date().toISOString())
-    .in("template_key", ["interest_confirmation", "registration_confirmation"])
+    .in("template_key", ["interest_confirmation", "registration_confirmation"]);
+  queueQuery = registrationId
+    ? queueQuery.eq("competition_registration_id", registrationId)
+    : queueQuery.eq("registration_interest_id", interestId);
+  const { data: jobs, error: queueError } = await queueQuery
     .order("created_at")
-    .limit(10);
+    .limit(1);
 
   if (queueError) {
     return new Response(JSON.stringify({ error: queueError.message }), { status: 500, headers: jsonHeaders });

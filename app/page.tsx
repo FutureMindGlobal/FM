@@ -615,6 +615,27 @@ export default function Home() {
     placeholder: "Your email address",
     button: "Get early access",
   });
+  const faq = c("faq", {
+    eyebrow: "Questions, answered",
+    title: "Frequently asked questions",
+    description: "Everything students, parents and schools need to know before taking part.",
+    items: [
+      { question: "What is the Global Future Skills Challenge?", answer: "It is an international annual competition where young people respond to realistic scenarios that assess critical thinking, ethical decision-making, creativity, empathy, global citizenship and sustainable problem-solving." },
+      { question: "Who can participate?", answer: "Students aged 8–18 can participate in one of five age-appropriate levels. Individuals, parents, schools and organisations can register." },
+      { question: "When is the next competition?", answer: "The inaugural Global Future Skills Challenge is planned for November 2026. Confirmed dates and participation instructions will be shared with registered students." },
+      { question: "What will students receive?", answer: "Students can receive a personal Future Mind profile and score, an approved verifiable certificate, international recognition and Global Distinction eligibility for high performers." },
+      { question: "Is the challenge available in English?", answer: "Yes. The 2026 challenge will be delivered in English." },
+      { question: "How will students access the challenge?", answer: "Students register and sign in to their account. Available practice activities and scheduled competitions then appear in the student dashboard." },
+    ],
+  });
+  const contact = c("contact", {
+    eyebrow: "Contact Future Mind Global",
+    title: "We’re here to help.",
+    description: "For questions about registration, schools, partnerships or the Global Future Skills Challenge, contact our team by email.",
+    email: "info@futuremindglobal.org",
+    button: "Email our team",
+    response_note: "We aim to reply as soon as possible.",
+  });
 
   return (
     <main className="site-root">
@@ -961,6 +982,38 @@ export default function Home() {
           </button>
         </form>
         <small>{notice}</small>
+      </section>
+
+      <section className="section faq-section" id="faq">
+        <div className="faq-intro">
+          <div className="eyebrow"><span /> {faq.eyebrow}</div>
+          <h2>{faq.title}</h2>
+          <p>{faq.description}</p>
+        </div>
+        <div className="faq-list">
+          {(faq.items || []).map((item: any, index: number) => (
+            <details key={`${item.question}-${index}`} open={index === 0}>
+              <summary><span>{String(index + 1).padStart(2, "0")}</span>{item.question}</summary>
+              <p>{item.answer}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section className="section contact-section" id="contact">
+        <div>
+          <div className="eyebrow dark"><span /> {contact.eyebrow}</div>
+          <h2>{contact.title}</h2>
+          <p>{contact.description}</p>
+        </div>
+        <div className="contact-card">
+          <small>GENERAL ENQUIRIES</small>
+          <a href={`mailto:${contact.email}`}>{contact.email}</a>
+          <p>{contact.response_note}</p>
+          <a className="button dark-button" href={`mailto:${contact.email}`}>
+            {contact.button} <ArrowIcon />
+          </a>
+        </div>
       </section>
 
       {footerSettings !== null && (

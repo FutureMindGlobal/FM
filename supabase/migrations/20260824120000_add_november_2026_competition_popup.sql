@@ -39,8 +39,8 @@ insert into public.popups (
   delay_seconds,
   position,
   allow_close,
-  show_mobile,
-  show_desktop,
+  is_mobile_enabled,
+  is_desktop_enabled,
   priority,
   open_new_tab
 )

@@ -257,7 +257,7 @@ export default function Home() {
 
   useEffect(() => {
     const timer = window.setInterval(
-      () => setHeroSlide((current) => (current + 1) % 3),
+      () => setHeroSlide((current) => current + 1),
       6500,
     );
     return () => window.clearInterval(timer);
@@ -444,17 +444,23 @@ export default function Home() {
   }
 
   const top = c("top", {
-    eyebrow: "A global platform for young minds",
-    title: "Think beyond borders.",
-    accent_title: "Lead what comes next.",
+    eyebrow: "International annual competition · Ages 8–18",
+    title: "Global Future Skills Challenge 2026.",
+    accent_title: "How will you think?",
     description:
-      "Build the human capabilities that shape the future—then put them to the test in a global challenge designed for thoughtful young leaders.",
-    primary_button: "Experience the challenge",
-    secondary_button: "Explore the six skills",
-    proof_title: "Built for curious minds everywhere",
-    proof_text: "Learning • Assessment • Recognition",
-    card_label: "THE 2026 CHALLENGE",
-    card_title: "One world. Six human capabilities.",
+      "An international annual competition where young people solve real-world scenarios, discover their strengths and earn globally verifiable recognition.",
+    primary_button: "Register for the competition",
+    secondary_button: "Try a Challenge · 2 minutes",
+    proof_title: "Inaugural international competition",
+    proof_text: "November 2026 · Five age levels · Open worldwide",
+    card_label: "GLOBAL CHALLENGE 2026",
+    card_title: "Participate. Discover. Improve. Return stronger.",
+    facts: [
+      { label: "Who", value: "Young people aged 8–18" },
+      { label: "What", value: "International annual challenge" },
+      { label: "When", value: "November 2026" },
+      { label: "Outcome", value: "Profile, certificate and ranking" },
+    ],
   });
   const heroSlides = (
     Array.isArray(top.slides) && top.slides.length
@@ -482,6 +488,14 @@ export default function Home() {
             accent_title: "Share them with the world.",
             description:
               "Practice, compete and earn meaningful recognition for the human capabilities that shape tomorrow.",
+          },
+          {
+            image: "/future-lab-junior-global.png",
+            eyebrow: "International annual competition · Ages 8–18",
+            title: "Young minds connect.",
+            accent_title: "Ideas cross borders.",
+            description:
+              "Students from every background can think together, solve meaningful scenarios and make their strengths visible.",
           },
         ]
   ).slice(0, 6);
@@ -511,6 +525,13 @@ export default function Home() {
     accent_title: "Three stages.",
     description:
       "Age-appropriate pathways turn big ideas into practical habits—from first questions to confident global judgment.",
+    journey: [
+      { title: "Participate", text: "Take the annual challenge" },
+      { title: "Discover", text: "Receive your strengths profile" },
+      { title: "Improve", text: "Build the capabilities that matter" },
+      { title: "Return", text: "Come back for the next annual challenge" },
+      { title: "Progress", text: "Advance through the age levels" },
+    ],
     items: levels,
   });
   const levelItems = (pathways.items || levels).map((x: any, i: number) => ({
@@ -555,21 +576,29 @@ export default function Home() {
     scenario_button: "Open scenario",
   });
   const recognition = c("recognition", {
-    eyebrow: "Recognition with meaning",
-    title: "Make your strengths visible to the world.",
+    eyebrow: "What every student receives",
+    title: "More than a score. A record of how you think.",
     description:
-      "Every participant receives meaningful feedback. High-performing students earn secure, verifiable recognition they can add to academic applications and personal portfolios.",
+      "Every completed challenge produces a meaningful outcome students can understand, share and build on year after year.",
     items: [
-      { title: "Participation", text: "Complete the full global assessment." },
+      { title: "Future Mind profile & scores", text: "See strengths and growth areas across the six capabilities." },
       {
-        title: "Achievement",
-        text: "Meet the international competency standard.",
+        title: "Secure certificate",
+        text: "Receive a globally verifiable record of participation or achievement.",
+      },
+      {
+        title: "International ranking",
+        text: "Compare global, country and age-level performance when rankings are published.",
       },
       {
         title: "Global Distinction",
-        text: "Place in the top 10% of your age group.",
+        text: "High performers can earn recognition for placing in the top 10% of their age level.",
       },
     ],
+  });
+  const competitionOverview = c("competition_overview", {
+    button: "Try 3 sample questions",
+    facts: top.facts,
   });
   const verify = c("verify", {
     eyebrow: "Trust built in",
@@ -687,6 +716,22 @@ export default function Home() {
         </div>
       </section>
 
+      <section
+        className="competition-facts"
+        id="competition_overview"
+        aria-label="Competition overview"
+      >
+        {(competitionOverview.facts || []).map((fact: any) => (
+          <div key={fact.label}>
+            <small>{fact.label}</small>
+            <strong>{fact.value}</strong>
+          </div>
+        ))}
+        <button onClick={startQuiz}>
+          {competitionOverview.button} <ArrowIcon />
+        </button>
+      </section>
+
       <section className="statement" id="statement">
         <p>{statement.eyebrow}</p>
         <h2>{statement.title}</h2>
@@ -733,6 +778,15 @@ export default function Home() {
             <em>{pathways.accent_title}</em>
           </h2>
           <p>{pathways.description}</p>
+        </div>
+        <div className="annual-journey" aria-label="Annual student progression">
+          {(pathways.journey || []).map((item: any, index: number) => (
+            <div key={item.title}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <strong>{item.title}</strong>
+              <small>{item.text}</small>
+            </div>
+          ))}
         </div>
         <div className="level-tabs" role="tablist">
           {levelItems.map((item: any) => (
